@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCM CCB Simulator & Configuration Item Registry</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .badge-pulse {
+      animation: pulse-ring 2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased">
+
+  <!-- Top Navigation Bar -->
+  <header class="bg-slate-800 border-b border-slate-700 sticky top-0 z-50 shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Logo & System Info -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md">
+          <i class="fa-solid fa-code-branch text-xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-base font-bold text-white tracking-tight">SCM CCB Simulator</h1>
+            <span class="px-2 py-0.5 text-xs font-semibold rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">VIT Review 3</span>
+          </div>
+          <p class="text-xs text-slate-400">Configuration Item Registry & Change Control Board</p>
+        </div>
+      </div>
+
+      <!-- Center Controls / SCM Standard Badge -->
+      <div class="hidden md:flex items-center space-x-2 text-xs bg-slate-900/80 px-3 py-1.5 rounded-full border border-slate-700">
+        <span class="text-emerald-400 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          Standard: SWEBOK v3.0 / IEEE 828
+        </span>
+        <span class="text-slate-600">|</span>
+        <span class="text-slate-300">Baseline: <span id="activeBaselineTag" class="font-mono text-cyan-400">BL-v1.2</span></span>
+      </div>
+
+      <!-- Right Controls: Active Role Switcher & Stale Alerts -->
+      <div class="flex items-center space-x-4">
+        <!-- Stale CR Alert Notification -->
+        <div class="relative cursor-pointer" onclick="switchTab('ccb')" title="Stale Change Request Notifications">
+          <button class="p-2 text-slate-300 hover:text-white relative focus:outline-none">
+            <i class="fa-solid fa-bell text-lg"></i>
+            <span id="staleBadge" class="hidden absolute top-1 right-1 w-2.5 h-2.5 bg-rose-500 rounded-full badge-pulse"></span>
+          </button>
+        </div>
+
+        <!-- Role Selector (RBAC simulation) -->
+        <div class="flex items-center space-x-2 bg-slate-700/60 p-1.5 rounded-lg border border-slate-600">
+          <i class="fa-solid fa-user-shield text-slate-400 ml-1.5 text-sm"></i>
+          <div class="flex flex-col">
+            <label for="roleSelector" class="text-[10px] uppercase font-bold text-slate-400 leading-none">Active Persona</label>
+            <select id="roleSelector" onchange="handleRoleChange()" class="bg-transparent text-xs font-semibold text-white focus:outline-none cursor-pointer pr-1">
+              <option value="developer" class="bg-slate-800 text-white">Member A (Developer)</option>
+              <option value="chairperson" class="bg-slate-800 text-white" selected>Member B (CCB Chairperson)</option>
+              <option value="admin" class="bg-slate-800 text-white">Member C (SCM Admin & Auditor)</option>
+              <option value="viewer" class="bg-slate-800 text-white">Stakeholder (Viewer Only)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Reset & Demo Data Menu -->
+        <button onclick="resetToSampleData()" title="Reset to Review 2 Slide Data" class="px-2.5 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded border border-slate-600 transition">
+          <i class="fa-solid fa-rotate-left mr-1"></i> Reset Data
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Secondary Navigation Tabs -->
+  <nav class="bg-slate-800/80 border-b border-slate-700/80 backdrop-blur-sm sticky top-16 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex space-x-1 overflow-x-auto py-2 no-scrollbar" id="navTabs">
+        <button onclick="switchTab('registry')" id="tab-registry" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-white bg-indigo-600 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-cubes"></i>
+          <span>1. CI Registry</span>
+          <span id="ciCountBadge" class="ml-1.5 px-1.5 py-0.2 text-[10px] rounded-full bg-indigo-800">5</span>
+        </button>
+        <button onclick="switchTab('cr-form')" id="tab-cr-form" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-file-circle-plus"></i>
+          <span>2. Raise Change Request</span>
+        </button>
+        <button onclick="switchTab('ccb')" id="tab-ccb" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-gavel"></i>
+          <span>3. CCB Review Queue</span>
+          <span id="pendingCrBadge" class="ml-1.5 px-1.5 py-0.2 text-[10px] rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">2</span>
+        </button>
+        <button onclick="switchTab('csa')" id="tab-csa" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>4. Status Accounting (CSA)</span>
+        </button>
+        <button onclick="switchTab('audit')" id="tab-audit" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-clipboard-check"></i>
+          <span>5. FCA / PCA Audits</span>
+        </button>
+        <button onclick="switchTab('history')" id="tab-history" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-solid fa-timeline"></i>
+          <span>6. Change History Log</span>
+        </button>
+        <button onclick="switchTab('git-mapping')" id="tab-git-mapping" class="tab-btn px-3 py-2 rounded-md text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 flex items-center space-x-2 transition">
+          <i class="fa-brands fa-github"></i>
+          <span>7. Git & Tool Mapping</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Notification Banner for Role & Stale CRs -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-3 w-full">
+    <div id="staleAlertBanner" class="hidden bg-amber-500/10 border border-amber-500/40 rounded-lg p-3 text-amber-300 text-xs flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base"></i>
+        <span><strong>CCB SLA Alert:</strong> There are Change Requests pending CCB decision for over 48 hours without approval/rejection. Action required!</span>
+      </div>
+      <button onclick="switchTab('ccb')" class="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 rounded text-amber-200 border border-amber-500/30 font-semibold transition">
+        Review Now &rarr;
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content Body -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: CONFIGURATION ITEM (CI) REGISTRY    -->
+    <!-- ========================================== -->
+    <div id="view-registry" class="tab-content space-y-6">
+      
+      <!-- Top Actions & Summary -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/60 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-boxes-stacked text-indigo-400"></i>
+            Configuration Item (CI) Repository
+          </h2>
+          <p class="text-xs text-slate-400">Identification, baselining, and lifecycle control for software artifacts.</p>
+        </div>
+        
+        <div class="flex items-center gap-3">
+          <!-- Search / Filter -->
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-slate-400"></i>
+            <input type="text" id="ciSearchInput" oninput="renderCIs()" placeholder="Filter CIs..." class="pl-8 pr-3 py-1.5 bg-slate-900 text-xs text-white rounded-lg border border-slate-700 focus:outline-none focus:border-indigo-500">
+          </div>
+          
+          <!-- Add CI Button -->
+          <button id="addCiBtn" onclick="openAddCiModal()" class="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center gap-1.5 shadow transition">
+            <i class="fa-solid fa-plus"></i> Register New CI
+          </button>
+        </div>
+      </div>
+
+      <!-- CI Table -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-700">
+              <tr>
+                <th class="px-4 py-3">CI Identifier</th>
+                <th class="px-4 py-3">Item Name & Path</th>
+                <th class="px-4 py-3">Category</th>
+                <th class="px-4 py-3">Current Version</th>
+                <th class="px-4 py-3">Baseline State</th>
+                <th class="px-4 py-3">Owner</th>
+                <th class="px-4 py-3">Last Modified</th>
+                <th class="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ciTableBody" class="divide-y divide-slate-700/60">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Baselined Version Comparison Preview Modal / Section -->
+      <div class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4">
+        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2 flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved text-cyan-400"></i>
+          SCM Baseline Integrity Principle
+        </h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          Under SWEBOK guidelines, once an item is marked <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">Baselined</span>, direct modifications are prohibited. Any proposed modification strictly mandates a formal <strong>Change Request (CR)</strong> submission and <strong>CCB approval</strong> prior to generating an updated version.
+        </p>
+      </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 2: RAISE CHANGE REQUEST (CR FORM)      -->
+    <!-- ========================================== -->
+    <div id="view-cr-form" class="tab-content hidden max-w-3xl mx-auto space-y-6">
+      
+      <div class="bg-slate-800 p-6 rounded-xl border border-slate-700 shadow-md">
+        <div class="border-b border-slate-700 pb-4 mb-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-file-pen text-indigo-400"></i>
+              Submit Formal Change Request (CR)
+            </h2>
+            <span class="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-cyan-400 border border-slate-700">Form: SCM-CR-01</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Initiate a tracked configuration change proposal for review by the Change Control Board.</p>
+        </div>
+
+        <form id="crSubmitForm" onsubmit="handleCRSubmit(event)" class="space-y-4 text-xs">
+          
+          <!-- Select Target CI -->
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Target Configuration Item (CI) *</label>
+            <select id="crTargetCi" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+              <!-- Populated dynamically -->
+            </select>
+            <span class="text-[11px] text-slate-400">Choose the baselined CI to be modified.</span>
+          </div>
+
+          <!-- Change Title -->
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Change Summary / Title *</label>
+            <input type="text" id="crTitle" required placeholder="e.g., Implement JWT Auth Token Renewal & Secure Cookie Handling" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+
+          <!-- Classification & Severity -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1">Change Classification *</label>
+              <select id="crClassification" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+                <option value="Minor">Minor (Bugfix / Doc update / v1.0 &rarr; v1.1)</option>
+                <option value="Major">Major (Architecture / API Breaking / v1.0 &rarr; v2.0)</option>
+                <option value="Emergency">Emergency (Critical Hotfix / Production blocker)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-300 font-semibold mb-1">Requester Name *</label>
+              <input type="text" id="crRequester" required value="Member A (Developer)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+
+          <!-- Detailed Justification / Reason -->
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Change Description & Technical Reason *</label>
+            <textarea id="crDescription" rows="3" required placeholder="Describe the defect, enhancement, or requirement driving this change..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500"></textarea>
+          </div>
+
+          <!-- Impact Analysis -->
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Impact & Risk Assessment *</label>
+            <textarea id="crImpact" rows="2" required placeholder="Describe impact on dependent CIs, testing requirements, and rollback procedures..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500"></textarea>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="pt-2 flex items-center justify-end space-x-3">
+            <button type="button" onclick="switchTab('registry')" class="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Cancel</button>
+            <button type="submit" class="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-2 shadow-lg transition">
+              <i class="fa-solid fa-paper-plane"></i> Submit to CCB Queue
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 3: CCB APPROVAL SCREEN (CHAIRPERSON)   -->
+    <!-- ========================================== -->
+    <div id="view-ccb" class="tab-content hidden space-y-6">
+      
+      <!-- Top Banner -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-gavel text-amber-400"></i>
+              CCB Decision & Governance Dashboard
+            </h2>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Chairperson Console</span>
+          </div>
+          <p class="text-xs text-slate-400">Formal adjudication of submitted Change Requests with automated semantic versioning.</p>
+        </div>
+
+        <div class="flex items-center gap-3 text-xs">
+          <span class="text-slate-400">SLA Threshold: <strong class="text-slate-200">48h Pending</strong></span>
+          <span class="px-2.5 py-1 rounded bg-slate-900 text-cyan-400 border border-slate-700 font-mono">CCB Chair: Member B</span>
+        </div>
+      </div>
+
+      <!-- Pending Change Requests Section -->
+      <div class="space-y-4">
+        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+          <span>Pending Review Queue (<span id="pendingQueueCount">0</span>)</span>
+          <span class="text-[11px] text-slate-400 font-normal">Click review to approve/reject with rationale</span>
+        </h3>
+
+        <div id="ccbQueueContainer" class="space-y-3">
+          <!-- Dynamically populated with CR review cards -->
+        </div>
+      </div>
+
+      <!-- Concluded / Historic Reviews Table -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm mt-8">
+        <div class="px-4 py-3 bg-slate-900/70 border-b border-slate-700 flex items-center justify-between">
+          <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider">Concluded Change Requests</h4>
+          <span class="text-[11px] text-slate-400">Approved, Rejected, or Deferred</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/40 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-700">
+              <tr>
+                <th class="px-4 py-2.5">CR ID</th>
+                <th class="px-4 py-2.5">Target CI</th>
+                <th class="px-4 py-2.5">Title</th>
+                <th class="px-4 py-2.5">Class</th>
+                <th class="px-4 py-2.5">Decision</th>
+                <th class="px-4 py-2.5">Resulting Version</th>
+                <th class="px-4 py-2.5">CCB Rationale</th>
+                <th class="px-4 py-2.5">Decided Date</th>
+              </tr>
+            </thead>
+            <tbody id="ccbConcludedTableBody" class="divide-y divide-slate-700/60">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 4: STATUS ACCOUNTING (CSA DASHBOARD)   -->
+    <!-- ========================================== -->
+    <div id="view-csa" class="tab-content hidden space-y-6">
+      
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+          <span class="text-slate-400 text-xs">Total Active CIs</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="csaTotalCis" class="text-2xl font-bold text-white font-mono">0</span>
+            <span class="text-xs text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">100% Tracked</span>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+          <span class="text-slate-400 text-xs">Baselined Artifacts</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="csaBaselinedCis" class="text-2xl font-bold text-emerald-400 font-mono">0</span>
+            <span class="text-xs text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">Locked</span>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+          <span class="text-slate-400 text-xs">Approved CRs</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="csaApprovedCrs" class="text-2xl font-bold text-cyan-400 font-mono">0</span>
+            <span class="text-xs text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded">Merged</span>
+          </div>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 shadow-sm">
+          <span class="text-slate-400 text-xs">Pending CCB Queue</span>
+          <div class="flex items-baseline justify-between mt-1">
+            <span id="csaPendingCrs" class="text-2xl font-bold text-amber-400 font-mono">0</span>
+            <span class="text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">Under Review</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Charts & Visual Analytics Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-chart-pie text-indigo-400"></i>
+            Change Request Status Breakdown
+          </h3>
+          <div class="h-56 relative flex items-center justify-center">
+            <canvas id="crStatusChart"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-chart-bar text-cyan-400"></i>
+            Configuration Items by Type
+          </h3>
+          <div class="h-56 relative flex items-center justify-center">
+            <canvas id="ciTypeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Official CSA Accounting Summary Table (From Review 2 Requirements) -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
+        <div class="px-4 py-3 bg-slate-900/80 border-b border-slate-700 flex items-center justify-between">
+          <div>
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider">Formal Configuration Status Accounting (CSA) Ledger</h3>
+            <p class="text-[11px] text-slate-400">Status reporting compliance for faculty evaluation (Review 2 &amp; 3 syllabus).</p>
+          </div>
+          <button onclick="exportCsaReport()" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-200 border border-slate-600 flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-download"></i> Export CSA CSV
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/60 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-700">
+              <tr>
+                <th class="px-4 py-3">CI Code</th>
+                <th class="px-4 py-3">Artifact Name</th>
+                <th class="px-4 py-3">Category</th>
+                <th class="px-4 py-3">Baseline Ver.</th>
+                <th class="px-4 py-3">Current Ver.</th>
+                <th class="px-4 py-3">Total CRs</th>
+                <th class="px-4 py-3">Latest CR Status</th>
+                <th class="px-4 py-3">Integrity Check</th>
+              </tr>
+            </thead>
+            <tbody id="csaTableBody" class="divide-y divide-slate-700/60">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 5: AUDIT PAGE (FCA / PCA CHECKLIST)    -->
+    <!-- ========================================== -->
+    <div id="view-audit" class="tab-content hidden space-y-6">
+      
+      <!-- Top Banner -->
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-check text-cyan-400"></i>
+              SCM Verification & Configuration Audits (FCA / PCA)
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">SWEBOK compliant audit mechanism to detect configuration drift and verify requirement fulfillment.</p>
+          </div>
+          <button onclick="runConfigurationAudit()" class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg flex items-center gap-2 transition">
+            <i class="fa-solid fa-play"></i> Execute Automated Baseline Audit
+          </button>
+        </div>
+      </div>
+
+      <!-- PCA: Physical Configuration Audit (Baseline vs Actual Drift Detection) -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
+        <div class="px-4 py-3 bg-slate-900/80 border-b border-slate-700 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider">Physical Configuration Audit (PCA) - Baseline vs Actual</h3>
+          </div>
+          <span class="text-[11px] font-mono text-cyan-300" id="pcaAuditStatus">Status: Ready to Audit</span>
+        </div>
+        <div class="p-4">
+          <p class="text-xs text-slate-400 mb-3">
+            The PCA verifies that the actual physical build artifacts and versions match the authorized formal baseline records without unauthorized manual alterations.
+          </p>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-900/60 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-700">
+                <tr>
+                  <th class="px-4 py-2.5">CI Identifier</th>
+                  <th class="px-4 py-2.5">Item Name</th>
+                  <th class="px-4 py-2.5">Authorized Baseline Version</th>
+                  <th class="px-4 py-2.5">Live Deployed Version</th>
+                  <th class="px-4 py-2.5">Drift Assessment</th>
+                  <th class="px-4 py-2.5">Audit Finding</th>
+                </tr>
+              </thead>
+              <tbody id="pcaTableBody" class="divide-y divide-slate-700/60">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- FCA: Functional Configuration Audit Checklist -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-5 shadow-sm space-y-4">
+        <div class="border-b border-slate-700 pb-3 flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-indigo-400"></span>
+            <h3 class="text-xs font-bold text-white uppercase tracking-wider">Functional Configuration Audit (FCA) - Verification Checklist</h3>
+          </div>
+          <span class="text-[11px] text-slate-400">Verifies functional test cases against SRS requirements</span>
+        </div>
+
+        <div class="space-y-3" id="fcaChecklistContainer">
+          <!-- Populated dynamically with checkboxes -->
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 6: IMMUTABLE CHANGE HISTORY LOG        -->
+    <!-- ========================================== -->
+    <div id="view-history" class="tab-content hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-800/60 p-4 rounded-xl border border-slate-700">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-clock-rotate-left text-indigo-400"></i>
+            Chronological SCM Audit Log
+          </h2>
+          <p class="text-xs text-slate-400">Complete, append-only traceability of all CI registrations, CR submissions, CCB verdicts, and version increments.</p>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <button onclick="clearHistoryLog()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-300 border border-slate-600 transition">
+            <i class="fa-solid fa-trash-can mr-1"></i> Clear Local Log
+          </button>
+        </div>
+      </div>
+
+      <!-- Timeline Container -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 p-6 shadow-sm">
+        <div id="timelineContainer" class="relative border-l-2 border-slate-700 ml-4 space-y-6">
+          <!-- Dynamically populated timeline nodes -->
+        </div>
+      </div>
+
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- TAB 7: GIT & SCM TOOL MAPPING              -->
+    <!-- ========================================== -->
+    <div id="view-git-mapping" class="tab-content hidden space-y-6">
+      
+      <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-brands fa-github text-slate-100"></i>
+          SCM Theoretical Concepts &harr; Git / GitHub Implementation
+        </h2>
+        <p class="text-xs text-slate-400 mt-1">Direct mapping table and demonstration architecture required for Review 3 evaluation.</p>
+      </div>
+
+      <!-- Mapping Table Grid -->
+      <div class="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="bg-slate-900/80 text-slate-400 uppercase font-semibold text-[11px] border-b border-slate-700">
+              <tr>
+                <th class="px-4 py-3">SCM Theoretical Concept</th>
+                <th class="px-4 py-3">Git / GitHub Equivalent</th>
+                <th class="px-4 py-3">Implementation in this Project</th>
+                <th class="px-4 py-3">Command / Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700/60 font-mono text-[11px]">
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">Configuration Item (CI)</td>
+                <td class="px-4 py-3 text-cyan-400">Tracked Repository Files</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Modules registered in CI Registry with unique IDs</td>
+                <td class="px-4 py-3 text-slate-400">git add &lt;file&gt;</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">Version / Delta State</td>
+                <td class="px-4 py-3 text-cyan-400">Commit (SHA-1 Hash)</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Discrete version points generated upon CR approval</td>
+                <td class="px-4 py-3 text-slate-400">git commit -m "CR-102: ..."</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">Formal Baseline</td>
+                <td class="px-4 py-3 text-cyan-400">Annotated Git Tag</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Locked releases (e.g. BL-v1.0, BL-v1.1)</td>
+                <td class="px-4 py-3 text-slate-400">git tag -a v1.0 -m "Baseline 1.0"</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">Change Request (CR)</td>
+                <td class="px-4 py-3 text-cyan-400">Pull Request (PR) or Issue</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Formal CR submission form with rationale & classification</td>
+                <td class="px-4 py-3 text-slate-400">gh pr create --title "CR-102"</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">CCB Adjudication</td>
+                <td class="px-4 py-3 text-cyan-400">PR Code Review & Merge</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Chairperson approves CR before code is merged into baseline</td>
+                <td class="px-4 py-3 text-slate-400">gh pr review --approve / merge</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">Parallel Development</td>
+                <td class="px-4 py-3 text-cyan-400">Branches (main, feature/*)</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Isolated workspace per team member/feature</td>
+                <td class="px-4 py-3 text-slate-400">git checkout -b feature/auth</td>
+              </tr>
+              <tr class="hover:bg-slate-700/20">
+                <td class="px-4 py-3 font-sans font-bold text-white">SCM Automation</td>
+                <td class="px-4 py-3 text-cyan-400">GitHub Actions CI/CD</td>
+                <td class="px-4 py-3 font-sans text-slate-300">Automated lint, test, and FCA/PCA consistency audit on push</td>
+                <td class="px-4 py-3 text-slate-400">.github/workflows/ci.yml</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3-Member Contribution Architecture -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <div class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Member A (Developer)</div>
+          <div class="text-sm font-semibold text-white mb-2">CI Registry & RBAC</div>
+          <p class="text-xs text-slate-400">Responsible for Configuration Identification, artifact registration module, and user role permission structure.</p>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">Member B (CCB Chair)</div>
+          <div class="text-sm font-semibold text-white mb-2">Change Control & Auto-Versioning</div>
+          <p class="text-xs text-slate-400">Responsible for the CR submission lifecycle, CCB adjudication interface, SLA notification flags, and version calculus.</p>
+        </div>
+        <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+          <div class="text-xs font-bold text-cyan-400 uppercase tracking-wider mb-1">Member C (Auditor/Admin)</div>
+          <div class="text-sm font-semibold text-white mb-2">CSA, FCA/PCA & GitHub CI/CD</div>
+          <p class="text-xs text-slate-400">Responsible for Configuration Status Accounting ledger, baseline audit engine, and repository branching architecture.</p>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ========================================== -->
+  <!-- MODAL: REGISTER NEW CI                     -->
+  <!-- ========================================== -->
+  <div id="addCiModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-cube text-indigo-400"></i> Register New Configuration Item
+        </h3>
+        <button onclick="closeAddCiModal()" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+
+      <form id="newCiForm" onsubmit="handleCreateCI(event)" class="space-y-3">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">CI Identifier (Code) *</label>
+          <input type="text" id="newCiId" required placeholder="CI-AUTH-04" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500 font-mono">
+        </div>
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Artifact Name *</label>
+          <input type="text" id="newCiName" required placeholder="e.g., AuthService.js or SRS_Document.pdf" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Category *</label>
+            <select id="newCiCategory" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-indigo-500">
+              <option value="Source Code">Source Code</option>
+              <option value="Documentation">Documentation</option>
+              <option value="Configuration">Configuration</option>
+              <option value="Database">Database Schema</option>
+              <option value="Test Suite">Test Suite</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Initial Version *</label>
+            <input type="text" id="newCiVersion" required value="1.0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500 font-mono">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Owner *</label>
+            <input type="text" id="newCiOwner" required value="Member A" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-indigo-500">
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Baseline Status *</label>
+            <select id="newCiBaseline" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-indigo-500">
+              <option value="Baselined">Baselined (Locked)</option>
+              <option value="Draft">Draft / Working</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end space-x-2 border-t border-slate-700">
+          <button type="button" onclick="closeAddCiModal()" class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition">Save CI</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: CCB REVIEW DECISION MODAL           -->
+  <!-- ========================================== -->
+  <div id="ccbReviewModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-xs">
+      <div class="flex items-center justify-between border-b border-slate-700 pb-3">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-gavel text-amber-400"></i> CCB Review & Adjudication
+        </h3>
+        <button onclick="closeCcbReviewModal()" class="text-slate-400 hover:text-white">&times;</button>
+      </div>
+
+      <div class="bg-slate-900/60 p-3 rounded-lg border border-slate-700 space-y-1">
+        <div class="flex justify-between">
+          <span class="font-mono text-cyan-400 font-bold" id="modalCrId">CR-101</span>
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold" id="modalCrBadge">Minor</span>
+        </div>
+        <div class="text-white font-semibold" id="modalCrTitle">Title</div>
+        <div class="text-slate-400 text-[11px]" id="modalCrCi">Target CI: CI-AUTH-01 (Current: v1.0)</div>
+        <div class="text-slate-300 mt-2 text-[11px]" id="modalCrDesc">Description</div>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">CCB Decision *</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button type="button" onclick="selectDecision('Approved')" id="btnDecideApprove" class="p-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 text-emerald-300 font-bold hover:bg-emerald-500/20 text-center transition">
+              <i class="fa-solid fa-check mr-1"></i> Approve
+            </button>
+            <button type="button" onclick="selectDecision('Rejected')" id="btnDecideReject" class="p-2 rounded-lg border border-rose-500/50 bg-rose-500/10 text-rose-300 font-bold hover:bg-rose-500/20 text-center transition">
+              <i class="fa-solid fa-xmark mr-1"></i> Reject
+            </button>
+            <button type="button" onclick="selectDecision('Deferred')" id="btnDecideDefer" class="p-2 rounded-lg border border-slate-600 bg-slate-700/50 text-slate-300 font-bold hover:bg-slate-700 text-center transition">
+              <i class="fa-solid fa-clock mr-1"></i> Defer
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">CCB Justification & Rationale *</label>
+          <textarea id="modalCcbRationale" rows="2" required placeholder="Mandatory rationale for this verdict..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-white focus:outline-none focus:border-amber-500"></textarea>
+        </div>
+
+        <!-- Auto-version preview box (if Approved) -->
+        <div id="modalVersionPreview" class="hidden bg-indigo-950/40 border border-indigo-500/30 p-2.5 rounded-lg text-[11px] text-indigo-300 flex items-center justify-between">
+          <span><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Auto-Versioning Trigger:</span>
+          <span class="font-mono font-bold text-white" id="modalNextVersionText">v1.0 &rarr; v1.1</span>
+        </div>
+      </div>
+
+      <div class="pt-3 flex items-center justify-end space-x-2 border-t border-slate-700">
+        <button type="button" onclick="closeCcbReviewModal()" class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 transition">Close</button>
+        <button type="button" onclick="submitCcbDecision()" class="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold shadow transition">Submit Official Verdict</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+  <!-- Embedded Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>
